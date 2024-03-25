@@ -1,5 +1,5 @@
 tokens = [ "asdf" ]
-uploadPath = "/home/heinz/coding/bingo/upload/"
+uploadPath = ""
 port = 8123
 domain = "http://localhost"
 lifetime = "1h" # valid <1...9999><s/m/h>
