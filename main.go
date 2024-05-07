@@ -124,7 +124,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := conf.Domain + "/"
-	fmt.Fprintln(w, u+randomName)
+	fmt.Fprint(w, u+randomName)
 }
 
 func serveSyntax(fileName string, w http.ResponseWriter, r *http.Request) {
