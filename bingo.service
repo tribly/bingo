@@ -1,0 +1,10 @@
+[Unit]
+Description=Bingo server
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/bingo --config /etc/bingo.toml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
