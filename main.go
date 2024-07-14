@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,6 +19,8 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/gabriel-vasile/mimetype"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type Config struct {
@@ -127,11 +130,11 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, u+randomName)
 }
 
-func serveSyntax(fileName string, w http.ResponseWriter, r *http.Request) {
+func serveSyntax(fileName string) io.Reader {
 	lexer := lexers.Get(fileName)
 	if lexer == nil {
-		http.ServeFile(w, r, fileName)
-		return
+		f, _ := os.Open(fileName)
+		return f
 	}
 
 	style := styles.Get("autumn")
@@ -156,47 +159,53 @@ func serveSyntax(fileName string, w http.ResponseWriter, r *http.Request) {
 		os.Exit(1)
 	}
 
-	err = formatter.Format(w, style, iterator)
+	formatted := new(bytes.Buffer)
+	err = formatter.Format(formatted, style, iterator)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
+
+	return formatted
 }
 
-func serveFiles(w http.ResponseWriter, r *http.Request) {
+func serveFiles(ctx *fiber.Ctx) error {
 	uploadPath := conf.UploadPath
-	fileName := r.URL.Path[1:]
+	fileName := ctx.Params("filename")
 	fullpath := uploadPath + fileName
 	file, err := os.OpenFile(fullpath, os.O_RDONLY, 0644)
 	if errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintln(w, "File not found.")
-		return
+		return ctx.SendString("File not found.")
 	}
 	file.Close()
 
 	mtype, err := mimetype.DetectFile(fullpath)
 	if err != nil {
-		println(err)
-		return
+		return ctx.SendString(err.Error())
 	}
 
 	strings.Split(mtype.String(), "/")
 	m := strings.Split(mtype.String(), "/")[0]
 	mp := strings.Split(mtype.Parent().String(), "/")[0]
 	if m == "text" || mp == "text" {
-		serveSyntax(fullpath, w, r)
-	} else {
-		http.ServeFile(w, r, fullpath)
+		formatted := serveSyntax(fullpath)
+		ctx.Set(fiber.HeaderContentType, fiber.MIMETextHTML)
+		return ctx.SendStream(formatted)
 	}
+
+	return ctx.SendFile(fullpath, true)
 }
 
 func setupRoutes() {
-	http.HandleFunc("/upload", uploadFile)
-	http.HandleFunc("/", serveFiles)
-	err := http.ListenAndServe(":"+strconv.Itoa(conf.Port), nil)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
+	app := fiber.New()
+	app.Get("/:filename", serveFiles)
+	app.Listen(":" + strconv.Itoa(conf.Port))
+	// http.HandleFunc("/upload", uploadFile)
+	// http.HandleFunc("/", serveFiles)
+	// err := http.ListenAndServe(":"+strconv.Itoa(conf.Port), nil)
+	// if err != nil {
+	// 	fmt.Println(err.Error())
+	// }
 }
 
 func main() {
