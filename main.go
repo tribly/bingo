@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -82,9 +81,9 @@ func generateRandomName(n int) string {
 	return string(b)
 }
 
-func checkToken(r *http.Request) bool {
+func checkToken(ctx *fiber.Ctx) bool {
 	prefix := "Bearer "
-	authHeader := r.Header.Get("Authorization")
+	authHeader := ctx.Get("Authorization")
 	reqToken := strings.TrimPrefix(authHeader, prefix)
 
 	for _, token := range conf.Tokens {
@@ -96,38 +95,33 @@ func checkToken(r *http.Request) bool {
 	return false
 }
 
-func uploadFile(w http.ResponseWriter, r *http.Request) {
+func uploadFile(ctx *fiber.Ctx) error {
+	if !checkToken(ctx) {
+		return ctx.SendString("Not authenticated.")
+	}
+
 	uploadPath := conf.UploadPath
-	r.ParseMultipartForm(10 << 20)
-
-	if !checkToken(r) {
-		fmt.Fprintln(w, "Not authenticated.")
-		return
-	}
-
-	file, handler, err := r.FormFile("fil")
+	form, err := ctx.MultipartForm()
 	if err != nil {
-		fmt.Println("Error retrieving file")
-		fmt.Println(err)
-		return
-	}
-	defer file.Close()
-
-	fileExtension := filepath.Ext(handler.Filename)
-	randomName := generateRandomName(3) + fileExtension
-
-	filebytes, err := io.ReadAll(file)
-	if err != nil {
-		fmt.Println(err)
+		fmt.Println(err.Error())
+		return err
 	}
 
-	if err := os.WriteFile(uploadPath+randomName, filebytes, 0644); err != nil {
-		fmt.Println(err)
-		return
+	files := form.File["documents"]
+
+	for _, file := range files {
+		fmt.Println(file.Filename, file.Size, file.Header["Content-Type"][0])
+
+		fileExtension := filepath.Ext(file.Filename)
+		randomName := generateRandomName(3) + fileExtension
+
+		ctx.SaveFile(file, uploadPath+randomName)
+
+		u := conf.Domain + "/"
+		return ctx.SendString(u + randomName)
 	}
 
-	u := conf.Domain + "/"
-	fmt.Fprint(w, u+randomName)
+	return err
 }
 
 func serveSyntax(fileName string) io.Reader {
@@ -199,6 +193,7 @@ func serveFiles(ctx *fiber.Ctx) error {
 func setupRoutes() {
 	app := fiber.New()
 	app.Get("/:filename", serveFiles)
+	app.Post("/u", uploadFile)
 	app.Listen(":" + strconv.Itoa(conf.Port))
 	// http.HandleFunc("/upload", uploadFile)
 	// http.HandleFunc("/", serveFiles)
