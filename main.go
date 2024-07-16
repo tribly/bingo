@@ -94,7 +94,7 @@ func checkToken(token string) bool {
 
 func uploadFile(ctx *fiber.Ctx) error {
 	form, err := ctx.MultipartForm()
-	token := form.Value["token"][0]
+	token := form.Value["token"][0] // TODO out of range exception if empty
 
 	if !checkToken(token) {
 		return ctx.SendString("Not authenticated.")
