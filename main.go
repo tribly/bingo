@@ -192,11 +192,8 @@ func serveFiles(ctx *fiber.Ctx) error {
 
 func setupRoutes() {
 	app := fiber.New()
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Henlo.")
-	})
 	app.Get("/:filename", serveFiles)
-	app.Post("/u", uploadFile)
+	app.Post("/", uploadFile)
 	app.Listen(":" + strconv.Itoa(conf.Port))
 }
 
