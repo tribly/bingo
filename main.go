@@ -20,6 +20,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/template/html/v2"
 )
 
 type Config struct {
@@ -81,13 +82,9 @@ func generateRandomName(n int) string {
 	return string(b)
 }
 
-func checkToken(ctx *fiber.Ctx) bool {
-	prefix := "Bearer "
-	authHeader := ctx.Get("Authorization")
-	reqToken := strings.TrimPrefix(authHeader, prefix)
-
-	for _, token := range conf.Tokens {
-		if reqToken == token {
+func checkToken(token string) bool {
+	for _, allowed_token := range conf.Tokens {
+		if token == allowed_token {
 			return true
 		}
 	}
@@ -96,18 +93,20 @@ func checkToken(ctx *fiber.Ctx) bool {
 }
 
 func uploadFile(ctx *fiber.Ctx) error {
-	if !checkToken(ctx) {
+	form, err := ctx.MultipartForm()
+	token := form.Value["token"][0]
+
+	if !checkToken(token) {
 		return ctx.SendString("Not authenticated.")
 	}
 
 	uploadPath := conf.UploadPath
-	form, err := ctx.MultipartForm()
 	if err != nil {
 		fmt.Println(err.Error())
 		return err
 	}
 
-	files := form.File["documents"]
+	files := form.File["files"]
 
 	for _, file := range files {
 		fmt.Println(file.Filename, file.Size, file.Header["Content-Type"][0])
@@ -117,6 +116,7 @@ func uploadFile(ctx *fiber.Ctx) error {
 
 		ctx.SaveFile(file, uploadPath+randomName)
 
+		// TODO currently single file upload only
 		u := conf.Domain + "/"
 		return ctx.SendString(u + randomName)
 	}
@@ -190,9 +190,19 @@ func serveFiles(ctx *fiber.Ctx) error {
 	return ctx.SendFile(fullpath, true)
 }
 
+func upScreen(ctx *fiber.Ctx) error {
+	return ctx.Render("index", fiber.Map{
+		"Title": "Henlo.",
+	})
+}
+
 func setupRoutes() {
-	app := fiber.New()
+	engine := html.New("./views", ".html")
+	app := fiber.New(fiber.Config{
+		Views: engine,
+	})
 	app.Get("/:filename", serveFiles)
+	app.Get("/", upScreen)
 	app.Post("/", uploadFile)
 	app.Listen(":" + strconv.Itoa(conf.Port))
 }
