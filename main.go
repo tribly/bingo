@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"embed"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,7 +22,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/template/html/v2"
+	"github.com/gofiber/fiber/v2/middleware/filesystem"
 )
 
 type Config struct {
@@ -32,6 +34,9 @@ type Config struct {
 }
 
 var conf Config
+
+//go:embed views/*
+var views embed.FS
 
 func loadConfig(p string) {
 	path := p
@@ -197,10 +202,11 @@ func upScreen(ctx *fiber.Ctx) error {
 }
 
 func setupRoutes() {
-	engine := html.New("./views", ".html")
-	app := fiber.New(fiber.Config{
-		Views: engine,
-	})
+	app := fiber.New()
+	app.Use("/", filesystem.New(filesystem.Config{
+		Root:       http.FS(views),
+		PathPrefix: "views",
+	}))
 	app.Get("/:filename", serveFiles)
 	app.Get("/", upScreen)
 	app.Post("/", uploadFile)
