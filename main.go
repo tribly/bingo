@@ -114,8 +114,6 @@ func uploadFile(ctx *fiber.Ctx) error {
 	files := form.File["files"]
 
 	for _, file := range files {
-		fmt.Println(file.Filename, file.Size, file.Header["Content-Type"][0])
-
 		fileExtension := filepath.Ext(file.Filename)
 		randomName := generateRandomName(3) + fileExtension
 
@@ -195,12 +193,6 @@ func serveFiles(ctx *fiber.Ctx) error {
 	return ctx.SendFile(fullpath, true)
 }
 
-func upScreen(ctx *fiber.Ctx) error {
-	return ctx.Render("index", fiber.Map{
-		"Title": "Henlo.",
-	})
-}
-
 func setupRoutes() {
 	app := fiber.New()
 	app.Use("/", filesystem.New(filesystem.Config{
@@ -208,7 +200,6 @@ func setupRoutes() {
 		PathPrefix: "views",
 	}))
 	app.Get("/:filename", serveFiles)
-	app.Get("/", upScreen)
 	app.Post("/", uploadFile)
 	app.Listen(":" + strconv.Itoa(conf.Port))
 }
