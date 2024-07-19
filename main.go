@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"embed"
 	"errors"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
+	"github.com/gofiber/template/html/v2"
 )
 
 type Config struct {
@@ -37,6 +39,9 @@ var conf Config
 
 //go:embed views/*
 var views embed.FS
+
+//go:embed views/multipaste.html
+var multiview embed.FS
 
 func loadConfig(p string) {
 	path := p
@@ -113,18 +118,45 @@ func uploadFile(ctx *fiber.Ctx) error {
 
 	files := form.File["files"]
 
+	if len(files) == 1 {
+		fileExtension := filepath.Ext(files[0].Filename)
+		randomName := generateRandomName(3) + fileExtension
+
+		ctx.SaveFile(files[0], uploadPath+randomName)
+
+		if ctx.Get("User-Agent") == "dingo_client" {
+			u := conf.Domain + "/"
+			return ctx.SendString(u + randomName)
+		}
+
+		return ctx.Redirect("/" + randomName)
+	}
+
+	var multi_upload []string
+
 	for _, file := range files {
 		fileExtension := filepath.Ext(file.Filename)
 		randomName := generateRandomName(3) + fileExtension
 
 		ctx.SaveFile(file, uploadPath+randomName)
-
-		// TODO currently single file upload only
-		u := conf.Domain + "/"
-		return ctx.SendString(u + randomName)
+		multi_upload = append(multi_upload, randomName)
 	}
 
-	return err
+	multi_name := "m-" + generateRandomName(3)
+	f, err := os.Create(uploadPath + multi_name)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	for _, line := range multi_upload {
+		_, err := f.WriteString(line + "\n")
+		if err != nil {
+			return err
+		}
+	}
+
+	return ctx.Redirect("/" + multi_name)
 }
 
 func serveSyntax(fileName string) io.Reader {
@@ -176,6 +208,10 @@ func serveFiles(ctx *fiber.Ctx) error {
 	}
 	file.Close()
 
+	if strings.Split(ctx.Params("filename"), "-")[0] == "m" {
+		return serveMulti(ctx)
+	}
+
 	mtype, err := mimetype.DetectFile(fullpath)
 	if err != nil {
 		return ctx.SendString(err.Error())
@@ -193,12 +229,47 @@ func serveFiles(ctx *fiber.Ctx) error {
 	return ctx.SendFile(fullpath, true)
 }
 
+func serveMulti(ctx *fiber.Ctx) error {
+	filename := ctx.Params("filename")
+	uploadPath := conf.UploadPath
+	fullpath := uploadPath + filename
+	file, err := os.Open(fullpath)
+	if err != nil {
+		return ctx.SendString("File not found.")
+	}
+	defer file.Close()
+
+	fileScanner := bufio.NewScanner(file)
+
+	type File struct {
+		Name string
+	}
+
+	type Multi struct {
+		Files []File
+	}
+
+	var ups Multi
+
+	for fileScanner.Scan() {
+		ups.Files = append(ups.Files, File{Name: fileScanner.Text()})
+	}
+
+	return ctx.Render("views/multipaste", fiber.Map{
+		"Files": ups.Files,
+	})
+}
+
 func setupRoutes() {
-	app := fiber.New()
+	engine := html.NewFileSystem(http.FS(views), ".html")
+	app := fiber.New(fiber.Config{
+		Views: engine,
+	})
 	app.Use("/", filesystem.New(filesystem.Config{
 		Root:       http.FS(views),
 		PathPrefix: "views",
 	}))
+	app.Static("/u/", "./upload")
 	app.Get("/:filename", serveFiles)
 	app.Post("/", uploadFile)
 	app.Listen(":" + strconv.Itoa(conf.Port))
