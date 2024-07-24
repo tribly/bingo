@@ -7,7 +7,9 @@
 
 <body>
   {{range .Files}}
-    <img src="/u/{{.Name}}"/>
+  <a href="/u/{{.Name}}">
+    <img width=250px src="/u/{{.Name}}"/>
+  </a>
   {{end}}
 </body>
 
