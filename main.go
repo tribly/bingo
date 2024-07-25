@@ -35,6 +35,14 @@ type Config struct {
 	Lifetime   string
 }
 
+type File struct {
+	Name string
+}
+
+type Multi struct {
+	Files []File
+}
+
 var conf Config
 
 //go:embed views/*
@@ -198,7 +206,7 @@ func serveSyntax(fileName string) io.Reader {
 	return formatted
 }
 
-func serveFiles(ctx *fiber.Ctx) error {
+func serve(ctx *fiber.Ctx) error {
 	uploadPath := conf.UploadPath
 	fileName := ctx.Params("filename")
 	fullpath := uploadPath + fileName
@@ -209,9 +217,13 @@ func serveFiles(ctx *fiber.Ctx) error {
 	file.Close()
 
 	if strings.Split(ctx.Params("filename"), "-")[0] == "m" {
-		return serveMulti(ctx)
+		return serveMulti(fullpath, ctx)
+	} else {
+		return serveSingle(fullpath, ctx)
 	}
+}
 
+func serveSingle(fullpath string, ctx *fiber.Ctx) error {
 	mtype, err := mimetype.DetectFile(fullpath)
 	if err != nil {
 		return ctx.SendString(err.Error())
@@ -229,10 +241,7 @@ func serveFiles(ctx *fiber.Ctx) error {
 	return ctx.SendFile(fullpath, true)
 }
 
-func serveMulti(ctx *fiber.Ctx) error {
-	filename := ctx.Params("filename")
-	uploadPath := conf.UploadPath
-	fullpath := uploadPath + filename
+func serveMulti(fullpath string, ctx *fiber.Ctx) error {
 	file, err := os.Open(fullpath)
 	if err != nil {
 		return ctx.SendString("File not found.")
@@ -241,22 +250,14 @@ func serveMulti(ctx *fiber.Ctx) error {
 
 	fileScanner := bufio.NewScanner(file)
 
-	type File struct {
-		Name string
-	}
-
-	type Multi struct {
-		Files []File
-	}
-
-	var ups Multi
+	var multiple_files Multi
 
 	for fileScanner.Scan() {
-		ups.Files = append(ups.Files, File{Name: fileScanner.Text()})
+		multiple_files.Files = append(multiple_files.Files, File{Name: fileScanner.Text()})
 	}
 
 	return ctx.Render("views/multipaste", fiber.Map{
-		"Files": ups.Files,
+		"Files": multiple_files.Files,
 	})
 }
 
@@ -270,7 +271,7 @@ func setupRoutes() {
 		PathPrefix: "views",
 	}))
 	app.Static("/u/", "./upload")
-	app.Get("/:filename", serveFiles)
+	app.Get("/:filename", serve)
 	app.Post("/", uploadFile)
 	app.Listen(":" + strconv.Itoa(conf.Port))
 }
