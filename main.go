@@ -264,7 +264,8 @@ func serveMulti(fullpath string, ctx *fiber.Ctx) error {
 func setupRoutes() {
 	engine := html.NewFileSystem(http.FS(views), ".html")
 	app := fiber.New(fiber.Config{
-		Views: engine,
+		Views:     engine,
+		BodyLimit: 1000 * 1024 * 1024,
 	})
 	app.Use("/", filesystem.New(filesystem.Config{
 		Root:       http.FS(views),
